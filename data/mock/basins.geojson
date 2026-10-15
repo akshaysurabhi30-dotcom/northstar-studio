@@ -1,0 +1,9 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {"type":"Feature","properties":{"hybas_id":"MOCK-OH-45040-WEST","up_area_km2":148.6,"elevation_mean_m_asl_candidate":250.0,"natural_discharge_m3_s_candidate":1.8,"landcover_class_glc2000_candidate":1},"geometry":{"type":"Polygon","coordinates":[[[-84.43,39.30],[-84.30,39.30],[-84.30,39.39],[-84.43,39.39],[-84.43,39.30]]]}} ,
+    {"type":"Feature","properties":{"hybas_id":"MOCK-OH-45040-EAST","up_area_km2":226.4,"elevation_mean_m_asl_candidate":242.0,"natural_discharge_m3_s_candidate":2.7,"landcover_class_glc2000_candidate":6},"geometry":{"type":"Polygon","coordinates":[[[-84.30,39.30],[-84.20,39.30],[-84.20,39.39],[-84.30,39.39],[-84.30,39.30]]]}} ,
+    {"type":"Feature","properties":{"hybas_id":"MOCK-OH-45040-NORTH","up_area_km2":311.9,"elevation_mean_m_asl_candidate":272.0,"natural_discharge_m3_s_candidate":3.6,"landcover_class_glc2000_candidate":4},"geometry":{"type":"Polygon","coordinates":[[[-84.43,39.39],[-84.20,39.39],[-84.20,39.48],[-84.43,39.48],[-84.43,39.39]]]}} ,
+    {"type":"Feature","properties":{"hybas_id":"MOCK-CA-001","up_area_km2":375.2,"elevation_mean_m_asl_candidate":285.0,"natural_discharge_m3_s_candidate":2.1,"landcover_class_glc2000_candidate":1},"geometry":{"type":"Polygon","coordinates":[[[-122.45,37.30],[-122.05,37.30],[-122.05,37.55],[-122.45,37.55],[-122.45,37.30]]]}}
+  ]
+}

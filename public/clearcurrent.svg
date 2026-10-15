@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 384">
+  <defs><clipPath id="rounded"><rect width="384" height="384" rx="84" /></clipPath></defs>
+  <rect width="384" height="384" rx="84" fill="#f8f5e9" />
+  <image href="/clearcurrent-mark.png" width="384" height="384" clip-path="url(#rounded)" />
+</svg>

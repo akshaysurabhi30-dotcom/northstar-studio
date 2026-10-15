@@ -1,0 +1,15 @@
+node_modules/
+.venv/
+dist/
+__pycache__/
+*.pyc
+*.zip
+api/.packages/
+api-runtime*.log
+data/processed/*.log
+data/raw/
+data/processed/*.parquet
+data/processed/*.metadata.json
+.env
+.env.*
+!.env.example

@@ -1,0 +1,11 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+numpy==2.2.1
+pandas==2.2.3
+scikit-learn==1.6.1
+xgboost==2.1.4
+lightgbm==4.5.0
+catboost==1.2.8
+geopandas>=1.0,<2
+pyarrow>=18,<20
+pyogrio>=0.10,<1
