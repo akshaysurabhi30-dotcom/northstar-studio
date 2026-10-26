@@ -145,7 +145,7 @@ def ai_guidance(doc_mg_l: float, basin_id: str, land_cover: str, latitude: float
     """Use GPT-5.6 Sol for short, non-medical community guidance."""
     key = os.getenv("OPENAI_API_KEY")
     if not key or key == "your_openai_api_key_here":
-        raise GuidanceError("Add OPENAI_API_KEY to .env, then restart the local API.")
+        raise GuidanceError("OpenAI guidance is not configured on this public API. The DOC estimate is still available.")
     in_ohio_pilot = 38.3 <= latitude <= 42.4 and -85.1 <= longitude <= -80.4
     resources = ([
         "Ohio EPA Certified Drinking Water Laboratory List: 614-644-2752 or DWLabCert@epa.ohio.gov.",
