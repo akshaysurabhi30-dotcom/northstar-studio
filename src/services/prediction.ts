@@ -55,10 +55,13 @@ export class PredictionError extends Error {
   }
 }
 
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
+const apiUrl = (path: string) => `${API_BASE_URL}${path}`
+
 export async function requestPrediction(coordinates: Coordinates, date: string, signal?: AbortSignal): Promise<Prediction> {
   validateCoordinates(coordinates)
   if (!date) throw new PredictionError(422, 'Choose a date.')
-  const response = await fetch('/api/predict', {
+  const response = await fetch(apiUrl('/api/predict'), {
     signal,
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -71,7 +74,7 @@ export async function requestPrediction(coordinates: Coordinates, date: string, 
 
 export async function requestCatchments(coordinates: Coordinates, signal?: AbortSignal): Promise<CatchmentCollection> {
   const query = new URLSearchParams({ latitude: String(coordinates.latitude), longitude: String(coordinates.longitude) })
-  const response = await fetch(`/api/catchments?${query}`, { signal })
+  const response = await fetch(apiUrl(`/api/catchments?${query}`), { signal })
   const payload = await response.json().catch(() => null) as CatchmentCollection | { detail?: string } | null
   if (!response.ok) throw new PredictionError(response.status, payload && 'detail' in payload ? payload.detail ?? 'Catchment boundaries could not be loaded.' : 'Catchment boundaries could not be loaded.')
   return payload as CatchmentCollection
