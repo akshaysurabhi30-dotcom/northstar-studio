@@ -55,7 +55,11 @@ load_local_environment()
 
 app = FastAPI(title="DOC prediction API", version="0.2.0")
 logger = logging.getLogger("doc_predictor")
-app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"], allow_methods=["*"], allow_headers=["*"])
+allowed_origins = [origin.strip() for origin in os.getenv(
+    "CORS_ALLOW_ORIGINS",
+    "https://akshaysurabhi30-dotcom.github.io,http://localhost:5173,http://127.0.0.1:5173",
+).split(",") if origin.strip()]
+app.add_middleware(CORSMiddleware, allow_origins=allowed_origins, allow_methods=["*"], allow_headers=["*"])
 data_source_mode: Literal["auto", "mock", "real"] = "auto"
 
 
