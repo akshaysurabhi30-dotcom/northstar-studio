@@ -9,6 +9,7 @@ from __future__ import annotations
 import pickle
 import logging
 import json
+import math
 import os
 import urllib.error
 import urllib.request
@@ -29,7 +30,12 @@ from shapely.geometry import mapping
 ROOT = Path(__file__).resolve().parent
 MODELS = ROOT / "models"
 BASINS_PATH = ROOT.parent / "data" / "processed" / "basins.parquet"
+TILED_BASINS_PATH = ROOT.parent / "data" / "processed" / "basins_tiles"
 MOCK_BASINS_PATH = ROOT.parent / "data" / "mock" / "basins.geojson"
+TILE_SIZE_DEGREES = 5.0
+MAP_SEARCH_RADIUS_DEGREES = 0.16
+MAP_GEOMETRY_SIMPLIFY_DEGREES = 0.002
+MAX_MAP_CATCHMENTS = 40
 NUMERIC_COLUMNS = ["Lat", "Lon", "area", "altitude", "dis_mean", "doy", "month_sin", "month_cos"]
 ENCODED_COLUMNS = ["dom_land_cover_Mixed", "dom_land_cover_Needleleaf", "dom_land_cover_unknown"]
 MODEL_COLUMNS = [*NUMERIC_COLUMNS, *ENCODED_COLUMNS]
@@ -87,8 +93,9 @@ model = load_pickle("simple_stacked_model.pkl")
 
 @lru_cache(maxsize=3)
 def load_basins(mode: Literal["auto", "mock", "real"] = "auto") -> gpd.GeoDataFrame:
-    is_mock = mode == "mock" or (mode == "auto" and not BASINS_PATH.exists())
-    if mode == "real" and not BASINS_PATH.exists():
+    real_ready = real_basin_data_ready()
+    is_mock = mode == "mock" or (mode == "auto" and not real_ready)
+    if mode == "real" and not real_ready:
         raise FileNotFoundError("Real BasinATLAS data has not been built yet. Run scripts/build_hydroatlas_dataset.py, then select Real BasinATLAS again.")
     if is_mock and not MOCK_BASINS_PATH.exists():
         raise FileNotFoundError("The USA BasinATLAS dataset has not been built. Run scripts/build_hydroatlas_dataset.py after downloading and extracting BasinATLAS.")
@@ -102,9 +109,67 @@ def load_basins(mode: Literal["auto", "mock", "real"] = "auto") -> gpd.GeoDataFr
     return basins
 
 
+def real_basin_data_ready() -> bool:
+    if TILED_BASINS_PATH.is_dir() and next(TILED_BASINS_PATH.glob("x*_y*.parquet"), None):
+        return True
+    return BASINS_PATH.exists()
+
+
+def data_source_for_mode(mode: Literal["auto", "mock", "real"]) -> str:
+    if mode == "mock" or (mode == "auto" and not real_basin_data_ready()):
+        return "mock"
+    return "BasinATLAS"
+
+
+def tile_key(longitude: float, latitude: float) -> tuple[int, int]:
+    return (
+        math.floor((longitude + 180) / TILE_SIZE_DEGREES),
+        math.floor((latitude + 90) / TILE_SIZE_DEGREES),
+    )
+
+
+@lru_cache(maxsize=6)
+def load_basin_tile(tile_x: int, tile_y: int) -> gpd.GeoDataFrame:
+    path = TILED_BASINS_PATH / f"x{tile_x}_y{tile_y}.parquet"
+    if not path.exists():
+        return gpd.GeoDataFrame(columns=list(REQUIRED_BASIN_COLUMNS), geometry="geometry", crs="EPSG:4326")
+    basins = gpd.read_parquet(path)
+    missing = REQUIRED_BASIN_COLUMNS.difference(basins.columns)
+    if missing:
+        raise ValueError(f"Spatial tile is missing required columns: {sorted(missing)}")
+    if basins.crs is None or basins.crs.to_epsg() != 4326:
+        raise ValueError("Processed basin geometries must use EPSG:4326.")
+    basins.attrs["data_source"] = "BasinATLAS"
+    return basins
+
+
+def load_tiles_for_bounds(bounds: tuple[float, float, float, float]) -> gpd.GeoDataFrame:
+    min_x, min_y, max_x, max_y = bounds
+    first_x, first_y = tile_key(min_x, min_y)
+    last_x, last_y = tile_key(max_x, max_y)
+    tiles = [
+        load_basin_tile(tile_x, tile_y)
+        for tile_x in range(first_x, last_x + 1)
+        for tile_y in range(first_y, last_y + 1)
+    ]
+    tiles = [tile for tile in tiles if not tile.empty]
+    if not tiles:
+        return gpd.GeoDataFrame(columns=list(REQUIRED_BASIN_COLUMNS), geometry="geometry", crs="EPSG:4326")
+    basins = gpd.GeoDataFrame(pd.concat(tiles, ignore_index=True), crs="EPSG:4326")
+    basins = basins.drop_duplicates(subset=["hybas_id"]).reset_index(drop=True)
+    basins.attrs["data_source"] = "BasinATLAS"
+    return basins
+
+
 def basin_for_point(latitude: float, longitude: float) -> pd.Series:
-    basins = load_basins(data_source_mode)
     point = Point(longitude, latitude)
+    if data_source_mode == "mock":
+        basins = load_basins("mock")
+    elif real_basin_data_ready() and TILED_BASINS_PATH.is_dir() and next(TILED_BASINS_PATH.glob("x*_y*.parquet"), None):
+        basins = load_basin_tile(*tile_key(longitude, latitude))
+    else:
+        # Backward-compatible local path for users who have only built the legacy file.
+        basins = load_basins(data_source_mode)
     candidate_indexes = basins.sindex.query(point, predicate="intersects")
     matches = basins.iloc[candidate_indexes].loc[lambda rows: rows.geometry.covers(point)]
     if matches.empty:
@@ -210,13 +275,12 @@ Use clear everyday words. Keep each sentence under 20 words. Do not say the wate
 
 @app.get("/api/health")
 def health():
-    active = "mock" if data_source_mode == "mock" or (data_source_mode == "auto" and not BASINS_PATH.exists()) else "BasinATLAS"
-    return {"status": "ok", "basin_dataset_ready": BASINS_PATH.exists(), "data_source": active, "mode": data_source_mode, "model": "simple_stacked_model.pkl"}
+    return {"status": "ok", "basin_dataset_ready": real_basin_data_ready(), "data_source": data_source_for_mode(data_source_mode), "mode": data_source_mode, "model": "simple_stacked_model.pkl"}
 
 
 @app.get("/api/settings/data-source")
 def get_data_source_settings():
-    return {"mode": data_source_mode, "real_data_ready": BASINS_PATH.exists(), "mock_data_ready": MOCK_BASINS_PATH.exists()}
+    return {"mode": data_source_mode, "real_data_ready": real_basin_data_ready(), "mock_data_ready": MOCK_BASINS_PATH.exists()}
 
 
 @app.put("/api/settings/data-source")
@@ -224,6 +288,7 @@ def set_data_source_settings(settings: DataSourceSettings):
     global data_source_mode
     data_source_mode = settings.mode
     load_basins.cache_clear()
+    load_basin_tile.cache_clear()
     return get_data_source_settings()
 
 
@@ -232,19 +297,40 @@ def catchments(latitude: float = Query(ge=-90, le=90), longitude: float = Query(
     """Return the selected and nearby catchment polygons for map display."""
     try:
         selected = basin_for_point(latitude, longitude)
-        basins = load_basins(data_source_mode)
+        point = Point(longitude, latitude)
+        if data_source_for_mode(data_source_mode) == "mock":
+            basins = load_basins("mock")
+        elif TILED_BASINS_PATH.is_dir() and next(TILED_BASINS_PATH.glob("x*_y*.parquet"), None):
+            search_window = point.buffer(MAP_SEARCH_RADIUS_DEGREES)
+            basins = load_tiles_for_bounds(search_window.bounds)
+        else:
+            basins = load_basins(data_source_mode)
     except (FileNotFoundError, ValueError) as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
     except LookupError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
 
-    # A compact geographic window keeps the map responsive for dense Level-12 data.
-    point = Point(longitude, latitude)
-    nearby_indexes = basins.sindex.query(point.buffer(0.16), predicate="intersects")
+    # Read only regional tiles, then limit and simplify map-only geometry.
+    search_window = point.buffer(MAP_SEARCH_RADIUS_DEGREES)
+    nearby_indexes = basins.sindex.query(search_window, predicate="intersects")
     nearby = basins.iloc[nearby_indexes].copy()
-    if selected.name not in nearby.index:
-        nearby = pd.concat([nearby, selected.to_frame().T])
-    nearby = nearby.head(120)
+    selected_id = str(selected["hybas_id"])
+    if selected_id not in nearby["hybas_id"].astype(str).values:
+        selected_frame = gpd.GeoDataFrame(
+            [selected.to_dict()], geometry="geometry", crs="EPSG:4326"
+        )
+        nearby = gpd.GeoDataFrame(
+            pd.concat([nearby, selected_frame], ignore_index=True),
+            geometry="geometry",
+            crs="EPSG:4326",
+        )
+    nearby["_selected"] = nearby["hybas_id"].astype(str) == selected_id
+    # Use a U.S. equal-area CRS for meaningful kilometer distances. Keep the
+    # original WGS84 geometry for the GeoJSON response sent to the map.
+    projected_point = gpd.GeoSeries([point], crs="EPSG:4326").to_crs("EPSG:5070").iloc[0]
+    nearby_projected = nearby.to_crs("EPSG:5070")
+    nearby["_distance"] = nearby_projected.geometry.distance(projected_point)
+    nearby = nearby.sort_values(["_selected", "_distance"], ascending=[False, True]).head(MAX_MAP_CATCHMENTS)
     features = [{
         "type": "Feature",
         "properties": {
@@ -253,9 +339,9 @@ def catchments(latitude: float = Query(ge=-90, le=90), longitude: float = Query(
             # Representative points always fall inside their polygon, unlike a
             # geometric centroid for concave catchments.
             "center": {"latitude": round(row.geometry.representative_point().y, 6), "longitude": round(row.geometry.representative_point().x, 6)},
-            "distance_km": round(float(row.geometry.distance(point)) * 111.0, 2),
+            "distance_km": round(float(row["_distance"]) / 1000.0, 2),
         },
-        "geometry": mapping(row.geometry),
+        "geometry": mapping(row.geometry.simplify(MAP_GEOMETRY_SIMPLIFY_DEGREES, preserve_topology=True)),
     } for _, row in nearby.iterrows()]
     features.sort(key=lambda feature: (not feature["properties"]["selected"], feature["properties"]["distance_km"]))
     return {"type": "FeatureCollection", "features": features, "selected_basin_id": str(selected["hybas_id"]), "data_source": basins.attrs["data_source"]}
@@ -265,7 +351,7 @@ def catchments(latitude: float = Query(ge=-90, le=90), longitude: float = Query(
 def predict(request: PredictionRequest):
     try:
         basin = basin_for_point(request.latitude, request.longitude)
-        data_source = load_basins(data_source_mode).attrs["data_source"]
+        data_source = data_source_for_mode(data_source_mode)
     except (FileNotFoundError, ValueError) as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
     except LookupError as error:

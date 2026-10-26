@@ -26,6 +26,8 @@ RAW_DIR = ROOT / "data" / "raw"
 PROCESSED_DIR = ROOT / "data" / "processed"
 OUTPUT_PATH = PROCESSED_DIR / "basins.parquet"
 METADATA_PATH = PROCESSED_DIR / "basins.metadata.json"
+TILES_DIR = PROCESSED_DIR / "basins_tiles"
+TILE_SIZE_DEGREES = 5.0
 
 # Official U.S. Census TIGER/Line state boundaries; excludes territories by default.
 US_BOUNDARY_URL = "https://www2.census.gov/geo/tiger/GENZ2023/shp/cb_2023_us_state_500k.zip"
@@ -162,13 +164,75 @@ def validate(frame: gpd.GeoDataFrame, geometry_repaired: int = 0, geometry_dropp
     return issues
 
 
+def write_spatial_tiles(frame: gpd.GeoDataFrame) -> dict[str, int | float]:
+    """Write small, overlapping-by-bounds tiles for memory-safe point lookups.
+
+    Each polygon is copied into every 5-degree cell its bounding box intersects.
+    This guarantees that the correct polygon is present in the cell containing
+    a user's point, including when the polygon crosses a cell boundary.
+    """
+    if frame.crs is None or frame.crs.to_epsg() != 4326:
+        raise ValueError("Spatial tiles require EPSG:4326 geometries.")
+
+    TILES_DIR.mkdir(parents=True, exist_ok=True)
+    for stale_tile in TILES_DIR.glob("x*_y*.parquet"):
+        stale_tile.unlink()
+
+    min_x, min_y, max_x, max_y = frame.total_bounds
+    first_x = int(np.floor((min_x + 180) / TILE_SIZE_DEGREES))
+    last_x = int(np.floor((max_x + 180) / TILE_SIZE_DEGREES))
+    first_y = int(np.floor((min_y + 90) / TILE_SIZE_DEGREES))
+    last_y = int(np.floor((max_y + 90) / TILE_SIZE_DEGREES))
+    spatial_index = frame.sindex
+    tile_count = 0
+    duplicated_rows = 0
+
+    from shapely.geometry import box
+
+    for tile_x in range(first_x, last_x + 1):
+        left = tile_x * TILE_SIZE_DEGREES - 180
+        right = left + TILE_SIZE_DEGREES
+        for tile_y in range(first_y, last_y + 1):
+            bottom = tile_y * TILE_SIZE_DEGREES - 90
+            top = bottom + TILE_SIZE_DEGREES
+            cell = box(left, bottom, right, top)
+            indexes = spatial_index.query(cell, predicate="intersects")
+            if not len(indexes):
+                continue
+            tile = frame.iloc[indexes].copy()
+            tile = tile.loc[tile.geometry.intersects(cell)]
+            if tile.empty:
+                continue
+            tile.to_parquet(TILES_DIR / f"x{tile_x}_y{tile_y}.parquet", index=False)
+            tile_count += 1
+            duplicated_rows += len(tile)
+
+    return {
+        "tile_size_degrees": TILE_SIZE_DEGREES,
+        "tile_count": tile_count,
+        "rows_with_tile_overlap": duplicated_rows,
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", type=Path, help="BasinATLAS geodatabase or Level-12 shapefile. If omitted, auto-detect under data/raw/.")
     parser.add_argument("--layer", default="BasinATLAS_v10_lev12", help="Layer name when input is a file geodatabase.")
     parser.add_argument("--usa-boundary", type=Path, help="Optional U.S. state boundary dataset. Defaults to official Census TIGER/Line states.")
     parser.add_argument("--extent", nargs=4, type=float, metavar=("MIN_LON", "MIN_LAT", "MAX_LON", "MAX_LAT"), help="Build a real regional pilot from this EPSG:4326 bounding box.")
+    parser.add_argument("--tiles-only", action="store_true", help="Build spatial tile files from the existing data/processed/basins.parquet file.")
     args = parser.parse_args()
+
+    if args.tiles_only:
+        if not OUTPUT_PATH.exists():
+            parser.error(f"Processed source is missing: {OUTPUT_PATH}")
+        frame = gpd.read_parquet(OUTPUT_PATH)
+        tile_metadata = write_spatial_tiles(frame)
+        metadata = json.loads(METADATA_PATH.read_text(encoding="utf-8")) if METADATA_PATH.exists() else {}
+        metadata["spatial_tiles"] = tile_metadata
+        METADATA_PATH.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+        print(f"Wrote {tile_metadata['tile_count']} spatial tiles to {TILES_DIR}")
+        return
 
     source_path = args.input or find_basinatlas_input()
     if source_path is None:
@@ -194,7 +258,8 @@ def main() -> None:
             raise ValueError("The requested regional extent contains no valid U.S. BasinATLAS catchments.")
         PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
         selected.to_parquet(OUTPUT_PATH, index=False)
-        METADATA_PATH.write_text(json.dumps({"crs": "EPSG:4326", "source": "HydroATLAS BasinATLAS v1.0, level 12", "geographic_filter": f"Regional pilot extent: {args.extent}", "rows": len(selected), "fields": list(selected.columns), "validation": issues, "model_readiness": "Real official BasinATLAS regional pilot for local prototype use."}, indent=2), encoding="utf-8")
+        tile_metadata = write_spatial_tiles(selected)
+        METADATA_PATH.write_text(json.dumps({"crs": "EPSG:4326", "source": "HydroATLAS BasinATLAS v1.0, level 12", "geographic_filter": f"Regional pilot extent: {args.extent}", "rows": len(selected), "fields": list(selected.columns), "validation": issues, "spatial_tiles": tile_metadata, "model_readiness": "Real official BasinATLAS regional pilot for local prototype use."}, indent=2), encoding="utf-8")
         print(f"Wrote {len(selected):,} regional-pilot basins to {OUTPUT_PATH}")
         return
     PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
@@ -244,6 +309,8 @@ def main() -> None:
     if not rows_written:
         raise ValueError("No valid U.S. BasinATLAS catchments were written.")
     temporary_output.replace(OUTPUT_PATH)
+    tile_frame = gpd.read_parquet(OUTPUT_PATH)
+    tile_metadata = write_spatial_tiles(tile_frame)
     METADATA_PATH.write_text(json.dumps({
         "crs": "EPSG:4326",
         "source": "HydroATLAS BasinATLAS v1.0, level 12",
@@ -251,6 +318,7 @@ def main() -> None:
         "rows": rows_written,
         "fields": [*SOURCE_FIELDS.values(), "geometry"],
         "validation": totals,
+        "spatial_tiles": tile_metadata,
         "model_readiness": "Operational prototype: API uses upstream area, mean sub-basin elevation, natural annual discharge, and an approximate GLC2000 land-cover crosswalk. These may differ from the original training variables.",
     }, indent=2), encoding="utf-8")
     print(f"Wrote {rows_written:,} basins to {OUTPUT_PATH}")
