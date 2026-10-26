@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react'
 
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
+const apiUrl = (path: string) => `${API_BASE_URL}${path}`
+
 type SourceMode = 'auto' | 'mock' | 'real'
 type Settings = { mode: SourceMode; real_data_ready: boolean; mock_data_ready: boolean }
 const options = [
@@ -17,7 +20,7 @@ export function SettingsPage() {
   const load = async (signal?: AbortSignal) => {
     setError(''); setFailedMode(null)
     try {
-      const response = await fetch('/api/settings/data-source', { signal })
+      const response = await fetch(apiUrl('/api/settings/data-source'), { signal })
       if (!response.ok) throw new Error('Could not load settings.')
       const value = await response.json() as Settings
       if (!signal?.aborted) setSettings(value)
@@ -27,7 +30,7 @@ export function SettingsPage() {
   const choose = async (mode: SourceMode) => {
     setSaving(true); setError(''); setFailedMode(null); setStatus('Saving…')
     try {
-      const response = await fetch('/api/settings/data-source', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode }) })
+      const response = await fetch(apiUrl('/api/settings/data-source'), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode }) })
       if (!response.ok) throw new Error('Could not save settings.')
       setSettings(await response.json() as Settings)
       setStatus('Saved')
