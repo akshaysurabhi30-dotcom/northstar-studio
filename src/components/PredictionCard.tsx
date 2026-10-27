@@ -58,8 +58,16 @@ export function PredictionCard({ prediction }: { prediction: Prediction }) {
       <h3>What this means</h3>
       <p>For catchment {basinId(prediction.basin_id)} on {formatDate(prediction.date)}, the model estimates {formatNumber(prediction.doc_mg_l)} mg/L of DOC.</p>
       <p>DOC is carbon from plants and soil. This estimate can help compare carbon levels between watersheds. It does not test a water sample.</p>
-      <p>In general, lower DOC is better for water clarity and can make treatment easier. Higher DOC can darken water and make treatment harder. This estimate shows a model prediction, not whether water is good or bad overall.</p>
-      <p className="safety-warning"><strong>Warning:</strong> DOC is only one part of water quality. This estimate does not account for germs, metals, other chemicals, or local conditions. Do not use it alone to decide if water is safe to drink, swim in, or give to pets.</p>
+      <p>Lower DOC is generally better for water clarity and can make treatment easier. Higher DOC is generally less favorable because it can darken water and make treatment harder.</p>
+      {typeof prediction.doc_mg_l === 'number' && Number.isFinite(prediction.doc_mg_l) && <div className="doc-scale" role="img" aria-label={`DOC level scale from low to high. Estimate: ${formatNumber(prediction.doc_mg_l)} mg/L. Colors show DOC level, not water safety.`}>
+        <div className="doc-scale-labels"><span>Low DOC</span><span>High DOC</span></div>
+        <div className="doc-scale-track" aria-hidden="true">
+          <span className="doc-scale-marker" style={{ left: `${Math.min(100, Math.max(0, prediction.doc_mg_l / 10 * 100))}%` }} />
+        </div>
+        <div className="doc-scale-values"><span>0 mg/L</span><span>10+ mg/L</span></div>
+        <p className="doc-scale-note">Visual reference only. The colors do not show whether water is safe.</p>
+      </div>}
+      <p className="safety-warning"><strong>Warning:</strong> DOC is only one part of water quality. This estimate does not account for germs, metals, other chemicals, or local conditions. It cannot determine if water is safe to drink, swim in, or give to pets. Check local notices or use water testing.</p>
       <h4>What to do next</h4>
       <ul>
         <li>Check local health or water-agency notices before swimming. Keep people and pets away from water with an active warning, visible algae, or unusual color or foam.</li>

@@ -110,6 +110,14 @@ input[type='date']::-webkit-calendar-picker-indicator { cursor: pointer; padding
 .result-value > span { font-size: clamp(3.5rem, 5vw, 4.8rem); font-weight: 500; letter-spacing: -.065em; line-height: 1.2; }
 .result-value small { color: var(--muted); font-size: 1.05rem; }
 .result-meta { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--muted); font-size: .8rem; margin-bottom: 26px; }
+.doc-scale { margin: 20px 0; }
+.doc-scale-labels, .doc-scale-values { display: flex; justify-content: space-between; gap: 10px; color: var(--muted); font-size: .75rem; }
+.doc-scale-labels { margin-bottom: 8px; font-weight: 600; }
+.doc-scale-track { position: relative; height: 18px; border-radius: 999px; background: linear-gradient(90deg, #3f9b67 0%, #9abe54 30%, #e8c044 58%, #e9823e 80%, #c74d42 100%); }
+.doc-scale-marker { position: absolute; top: 50%; width: 18px; height: 26px; transform: translate(-50%, -50%); border: 3px solid white; border-radius: 50%; background: #193f38; box-shadow: 0 1px 5px #173a2f70; }
+.doc-scale-values { margin-top: 7px; font-variant-numeric: tabular-nums; }
+.result-guidance > .doc-scale-note { margin: 7px 0 0; color: var(--muted); font-size: .75rem; }
+.safety-warning { padding: 13px 15px; border-left: 3px solid #d2a63e; border-radius: 5px; background: #faf6e8; color: #4c4b36 !important; }
 .result-guidance { padding-top: 24px; border-top: 1px solid var(--line); }
 .result-guidance > h3 { margin-bottom: 14px; font-size: 1rem; }
 .result-guidance > h4 { margin: 18px 0 8px; font-size: .9rem; }
