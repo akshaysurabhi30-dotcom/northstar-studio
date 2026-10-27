@@ -27,6 +27,30 @@ function basinId(value: unknown): string {
   return value == null ? 'Not available' : String(value).replace(/\.0$/, '')
 }
 
+function interpretDoc(value: number): { level: 'lower' | 'moderate' | 'higher'; label: string; range: string; meaning: string; impact: string } {
+  if (value < 3) return {
+    level: 'lower',
+    label: 'Lower DOC range',
+    range: 'Under 3 mg/L',
+    meaning: 'This estimate is in ClearCurrent’s lower comparison range. It means the model predicts less dissolved carbon than in the middle and higher ranges.',
+    impact: 'Lower DOC can mean less brown color from carbon and fewer carbon-related treatment needs. It does not mean the water is clean.',
+  }
+  if (value < 8) return {
+    level: 'moderate',
+    label: 'Moderate DOC range',
+    range: '3 to under 8 mg/L',
+    meaning: 'This estimate is in ClearCurrent’s middle comparison range. The model predicts more dissolved carbon than in the lower range, but less than in the higher range.',
+    impact: 'This amount of carbon may add color to the water. It may also affect how water is treated.',
+  }
+  return {
+    level: 'higher',
+    label: 'Higher DOC range',
+    range: '8 mg/L or more',
+    meaning: 'This estimate is in ClearCurrent’s higher comparison range. The model predicts more dissolved carbon than in the lower and middle ranges.',
+    impact: 'More DOC can make water look tea-colored. It can also make drinking-water treatment more difficult.',
+  }
+}
+
 export function PredictionCard({ prediction }: { prediction: Prediction }) {
   const watershed = prediction.watershed
   const guidance = prediction.guidance
@@ -39,9 +63,8 @@ export function PredictionCard({ prediction }: { prediction: Prediction }) {
   const isDemo = prediction.data_source === 'mock'
   const source = isDemo ? 'Demo data' : prediction.data_source === 'BasinATLAS' ? 'BasinATLAS' : 'Source unavailable'
   const inputs = Object.entries(prediction.inputs ?? {})
-  const docValue = typeof prediction.doc_mg_l === 'number' && Number.isFinite(prediction.doc_mg_l) ? prediction.doc_mg_l : null
-  const docPosition = docValue == null ? 0 : Math.min(100, Math.max(0, docValue / 10 * 100))
-  const docRangeDescription = docValue == null ? '' : docValue < 5 ? 'closer to the lower end' : docValue > 5 ? 'closer to the higher end' : 'at the midpoint'
+  const interpretation = interpretDoc(prediction.doc_mg_l)
+  const docScalePosition = Math.min(100, Math.max(0, prediction.doc_mg_l / 10 * 100))
 
   return <section className="result-card" aria-label="DOC result">
     <div className="result-heading">
@@ -56,22 +79,33 @@ export function PredictionCard({ prediction }: { prediction: Prediction }) {
       <time dateTime={prediction.date}>{formatDate(prediction.date)}</time>
       <span>Catchment {basinId(prediction.basin_id)}</span>
     </div>
-
-    <section className="result-guidance" aria-label="Plain-language DOC guidance">
-      <h3>What this means</h3>
-      <p>For catchment {basinId(prediction.basin_id)} on {formatDate(prediction.date)}, the model estimates {formatNumber(prediction.doc_mg_l)} mg/L of DOC.</p>
-      <p>DOC is carbon from plants and soil. This estimate can help compare carbon levels between watersheds. It does not test a water sample.</p>
-      {docValue != null && <p>For drinking-water treatment, {formatNumber(docValue)} mg/L is {docRangeDescription} on this visual DOC scale. Lower DOC is generally easier to treat. Higher DOC can increase treatment needs.</p>}
-      {docValue != null && <div className="doc-scale" role="img" aria-label={`DOC scale from low to high. Estimate: ${formatNumber(docValue)} mg/L, ${docRangeDescription}. This is a visual reference for DOC, not a drinking-water standard.`}>
+    <section className={`doc-interpretation doc-interpretation--${interpretation.level}`} aria-label="What this DOC estimate means">
+      <div className="doc-interpretation-heading">
+        <h3>{interpretation.label}</h3>
+        <span>{interpretation.range}</span>
+      </div>
+      <p>DOC is carbon from leaves, plants, and soil. Rain can carry it into streams.</p>
+      <p>{interpretation.meaning} These comparison ranges are not health limits.</p>
+      <p>{interpretation.impact}</p>
+      <div className="doc-scale" role="img" aria-label={`DOC scale from low to high. Estimate: ${formatNumber(prediction.doc_mg_l)} mg/L. The range is for comparison, not a health limit.`}>
         <div className="doc-scale-labels"><span>Low DOC</span><span>High DOC</span></div>
         <div className="doc-scale-track" aria-hidden="true">
-          <span className="doc-scale-marker" style={{ left: `${docPosition}%` }} />
+          <span className="doc-scale-marker" style={{ left: `${docScalePosition}%` }} />
         </div>
         <div className="doc-scale-values"><span>0 mg/L</span><span>10+ mg/L</span></div>
-        <p className="doc-scale-note">Visual reference only. It is not a drinking-water standard.</p>
-      </div>}
-      <p className="safety-warning"><strong>Other factors matter:</strong> This estimate covers DOC only. It does not measure germs, metals, other chemicals, or local conditions. Use your water utility’s report or a certified lab for a full drinking-water check.</p>
-      <h4>What to do next</h4>
+        <p className="doc-scale-note">Visual reference only. The comparison ranges are not health limits.</p>
+      </div>
+      <p>This estimate does not test for germs or chemicals. Follow local notices before swimming. Use a certified lab to test water for drinking.</p>
+    </section>
+    <section className="angler-info" aria-labelledby="angler-info-heading">
+      <h3 id="angler-info-heading">For anglers</h3>
+      <p>DOC can change how light moves through water. This can affect the small plants and animals that support fish.</p>
+      <p>This estimate does not count fish or test oxygen, chemicals, or fish tissue. Check advice for your waterbody and fish species before eating your catch.</p>
+      <a href="https://www.epa.gov/choose-fish-and-shellfish-wisely/state-territorial-tribal-and-epa-fish-program-contacts" target="_blank" rel="noreferrer">Find state and Tribal fish advisory contacts</a>
+    </section>
+
+    <section className="result-guidance" aria-label="What to do next">
+      <h3>What to do next</h3>
       <ul>
         <li>Check local health or water-agency notices before swimming. Keep people and pets away from water with an active warning, visible algae, or unusual color or foam.</li>
         <li>For tap water, read your utility’s annual water quality report. For a private well, contact a state-certified lab for testing.</li>
@@ -139,3 +173,4 @@ export function ErrorCard({ error, onRetry }: { error: { title: string; detail: 
     {onRetry && <button className="text-button" onClick={onRetry}>Try again</button>}
   </section>
 }
+
