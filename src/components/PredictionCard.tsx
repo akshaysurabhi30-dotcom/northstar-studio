@@ -54,8 +54,24 @@ export function PredictionCard({ prediction }: { prediction: Prediction }) {
       <span>Catchment {basinId(prediction.basin_id)}</span>
     </div>
 
-    {hasGuidance ? <section className="result-guidance" aria-label="Water guidance">
-      <h3>What you can do</h3>
+    <section className="result-guidance" aria-label="Plain-language DOC guidance">
+      <h3>What this means</h3>
+      <p>For catchment {basinId(prediction.basin_id)} on {formatDate(prediction.date)}, the model estimates {formatNumber(prediction.doc_mg_l)} mg/L of DOC.</p>
+      <p>DOC is carbon from plants and soil. This estimate can help compare carbon levels between watersheds. It does not test a water sample.</p>
+      <p><strong>Safety:</strong> This estimate cannot tell if water is safe or unsafe to drink, swim in, or give to pets. It does not test for germs or other chemicals.</p>
+      <h4>What to do next</h4>
+      <ul>
+        <li>Check local health or water-agency notices before swimming. Keep people and pets away from water with an active warning, visible algae, or unusual color or foam.</li>
+        <li>For tap water, read your utility’s annual water quality report. For a private well, contact a state-certified lab for testing.</li>
+      </ul>
+      <div className="guidance-links" aria-label="Trusted water resources">
+        <a href="https://www.epa.gov/ccr/ccr-information-consumers" target="_blank" rel="noreferrer">EPA: Find your drinking water report</a>
+        <a href="https://www.epa.gov/dwlabcert/contact-information-certification-programs-and-certified-laboratories-drinking-water" target="_blank" rel="noreferrer">EPA: Find a state-certified lab</a>
+        <a href="https://www.cdc.gov/healthy-swimming/prevention/" target="_blank" rel="noreferrer">CDC: Check swimming precautions</a>
+      </div>
+    </section>
+    {hasGuidance && <section className="result-guidance" aria-label="Additional location guidance">
+      <h3>Local guidance</h3>
       <div className="guidance-sections">
         {actions.length > 0 && <details className="guidance-section" open>
           <summary>Help your water</summary>
@@ -74,9 +90,6 @@ export function PredictionCard({ prediction }: { prediction: Prediction }) {
           <ul>{resources.map((resource, index) => <li key={index}>{resource}</li>)}</ul>
         </details>}
       </div>
-    </section> : <section className="guidance-error" role="status">
-      <h3>Guidance is unavailable</h3>
-      <p>{prediction.guidance_error || 'Try the estimate again.'}</p>
     </section>}
 
     <details className="technical-details" open>
