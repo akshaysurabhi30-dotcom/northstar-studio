@@ -39,6 +39,9 @@ export function PredictionCard({ prediction }: { prediction: Prediction }) {
   const isDemo = prediction.data_source === 'mock'
   const source = isDemo ? 'Demo data' : prediction.data_source === 'BasinATLAS' ? 'BasinATLAS' : 'Source unavailable'
   const inputs = Object.entries(prediction.inputs ?? {})
+  const docValue = typeof prediction.doc_mg_l === 'number' && Number.isFinite(prediction.doc_mg_l) ? prediction.doc_mg_l : null
+  const docPosition = docValue == null ? 0 : Math.min(100, Math.max(0, docValue / 10 * 100))
+  const docRangeDescription = docValue == null ? '' : docValue < 5 ? 'closer to the lower end' : docValue > 5 ? 'closer to the higher end' : 'at the midpoint'
 
   return <section className="result-card" aria-label="DOC result">
     <div className="result-heading">
@@ -58,16 +61,16 @@ export function PredictionCard({ prediction }: { prediction: Prediction }) {
       <h3>What this means</h3>
       <p>For catchment {basinId(prediction.basin_id)} on {formatDate(prediction.date)}, the model estimates {formatNumber(prediction.doc_mg_l)} mg/L of DOC.</p>
       <p>DOC is carbon from plants and soil. This estimate can help compare carbon levels between watersheds. It does not test a water sample.</p>
-      <p>Lower DOC is generally better for water clarity and can make treatment easier. Higher DOC is generally less favorable because it can darken water and make treatment harder.</p>
-      {typeof prediction.doc_mg_l === 'number' && Number.isFinite(prediction.doc_mg_l) && <div className="doc-scale" role="img" aria-label={`DOC level scale from low to high. Estimate: ${formatNumber(prediction.doc_mg_l)} mg/L. Colors show DOC level, not water safety.`}>
+      {docValue != null && <p>For drinking-water treatment, {formatNumber(docValue)} mg/L is {docRangeDescription} on this visual DOC scale. Lower DOC is generally easier to treat. Higher DOC can increase treatment needs.</p>}
+      {docValue != null && <div className="doc-scale" role="img" aria-label={`DOC scale from low to high. Estimate: ${formatNumber(docValue)} mg/L, ${docRangeDescription}. This is a visual reference for DOC, not a drinking-water standard.`}>
         <div className="doc-scale-labels"><span>Low DOC</span><span>High DOC</span></div>
         <div className="doc-scale-track" aria-hidden="true">
-          <span className="doc-scale-marker" style={{ left: `${Math.min(100, Math.max(0, prediction.doc_mg_l / 10 * 100))}%` }} />
+          <span className="doc-scale-marker" style={{ left: `${docPosition}%` }} />
         </div>
         <div className="doc-scale-values"><span>0 mg/L</span><span>10+ mg/L</span></div>
-        <p className="doc-scale-note">Visual reference only. The colors do not show whether water is safe.</p>
+        <p className="doc-scale-note">Visual reference only. It is not a drinking-water standard.</p>
       </div>}
-      <p className="safety-warning"><strong>Warning:</strong> DOC is only one part of water quality. This estimate does not account for germs, metals, other chemicals, or local conditions. It cannot determine if water is safe to drink, swim in, or give to pets. Check local notices or use water testing.</p>
+      <p className="safety-warning"><strong>Other factors matter:</strong> This estimate covers DOC only. It does not measure germs, metals, other chemicals, or local conditions. Use your water utility’s report or a certified lab for a full drinking-water check.</p>
       <h4>What to do next</h4>
       <ul>
         <li>Check local health or water-agency notices before swimming. Keep people and pets away from water with an active warning, visible algae, or unusual color or foam.</li>
