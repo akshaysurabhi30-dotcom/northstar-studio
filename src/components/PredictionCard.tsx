@@ -58,7 +58,8 @@ export function PredictionCard({ prediction }: { prediction: Prediction }) {
       <h3>What this means</h3>
       <p>For catchment {basinId(prediction.basin_id)} on {formatDate(prediction.date)}, the model estimates {formatNumber(prediction.doc_mg_l)} mg/L of DOC.</p>
       <p>DOC is carbon from plants and soil. This estimate can help compare carbon levels between watersheds. It does not test a water sample.</p>
-      <p><strong>Safety:</strong> This estimate cannot tell if water is safe or unsafe to drink, swim in, or give to pets. It does not test for germs or other chemicals.</p>
+      <p>In general, lower DOC is better for water clarity and can make treatment easier. Higher DOC can darken water and make treatment harder. This estimate shows a model prediction, not whether water is good or bad overall.</p>
+      <p className="safety-warning"><strong>Warning:</strong> DOC is only one part of water quality. This estimate does not account for germs, metals, other chemicals, or local conditions. Do not use it alone to decide if water is safe to drink, swim in, or give to pets.</p>
       <h4>What to do next</h4>
       <ul>
         <li>Check local health or water-agency notices before swimming. Keep people and pets away from water with an active warning, visible algae, or unusual color or foam.</li>
